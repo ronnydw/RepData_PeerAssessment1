@@ -5,21 +5,95 @@ output:
     keep_md: true
 ---
 
-
 ## Loading and preprocessing the data
 
+```{r load}
+setwd("~/Development/github/RepData_PeerAssessment1")
+activity <- read.csv("activity.csv")
+str(activity)
+summary(activity)
+```
 
+## Process the data
+
+```{r process}
+activity$date <- as.Date(activity$date)
+```
 
 ## What is mean total number of steps taken per day?
 
+Total number of steps each day
 
+```{r stepsPerDay}
+stepsPerDay <- aggregate(activity$steps, list(activity$date), sum, na.rm=TRUE)
+names(stepsPerDay) <- c("date", "steps")
+library(ggplot2)
+ggplot(stepsPerDay, aes(x=steps)) + geom_histogram(binwidth=5000)
+meanSteps <- as.integer(mean(stepsPerDay$steps))
+meanSteps
+medianSteps <- median(stepsPerDay$steps)
+medianSteps
+```
 
 ## What is the average daily activity pattern?
 
+```{r stepsDailyPattern}
+stepsPattern <- aggregate(activity$steps, list(activity$interval), mean, na.rm=TRUE)
+names(stepsPattern) <- c("time", "steps")
+plot(stepsPattern, type="l", main="Average daily activity pattern")
+maxInterval = stepsPattern$time[which.max(stepsPattern$steps)]
+```
 
+The 5-minute interval, with on average across all days, maximum number of steps: `r maxInterval`. 
 
 ## Imputing missing values
 
+```{r NAs}
+NAs <- sum(is.na(activity))
+rows <- nrow(activity)
+NAratio <- NAs/rows
+```
 
+There are `r NAs` missing values out of a total of `r rows`, or `r NAratio*100` %.
+
+Strategy: fill in missing values with the mean for that 5-minute interval.
+
+```{r impute}
+means <- aggregate(steps ~ interval, data = activity, mean, na.rm=TRUE)
+names(means)[2] <- "impute.steps"
+activityFix <- merge(activity, means) 
+activityFix$steps[is.na(activityFix$steps)] <- activityFix$impute.steps[is.na(activityFix$steps)]
+activityFix$impute.steps <- NULL
+str(activityFix)
+summary(activityFix)
+activity$na = "missing"
+activityFix$na = "imputed"
+combo = rbind(activity, activityFix)
+library(ggplot2)
+comboPerDay = aggregate(combo$steps, list(combo$date, combo$na), sum, na.rm=TRUE)
+colnames(comboPerDay) = c("date", "na", "steps")
+ggplot(comboPerDay, aes(x=steps, fill=na)) + geom_histogram(position="identity", alpha=.5, binwidth=5000)
+```
+
+8 days had missing values for all of the intervals, which are now filled with the mean values per interval,
+
+The mean and median shift accordingly:
+
+```{r}
+meanSteps
+meanSteps2 <- as.integer(mean(comboPerDay$steps[comboPerDay$na == "imputed"]))
+meanSteps2
+medianSteps
+medianSteps2 <- median(comboPerDay$steps[comboPerDay$na == "imputed"])
+medianSteps2
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+```{r}
+activityFix$date = as.Date(activityFix$date)
+activityFix$weekday = ifelse(weekdays(activityFix$date) %in% c("Saturday", "Sunday"), "Weekend", "Weekday")
+stepsPattern2 <- aggregate(activityFix$steps, list(activityFix$interval, activityFix$weekday), mean, na.rm=TRUE)
+names(stepsPattern2) = c("interval", "weekday", "steps")
+ggplot(stepsPattern2, aes(x=interval, y=steps)) + geom_line() + facet_grid(weekday ~.)
+```
